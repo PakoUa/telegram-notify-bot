@@ -8,7 +8,7 @@ API_TOKEN = "8208867869:AAHsSu-TgJsjoXMkdyRMQQON37Z3em2Dw3A"
 CHANNEL_ID = -1002245865369  # ID каналу svitlobot_kiltseva14
 
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()  # ⚠ тепер без аргументів
 
 # Щоб не дублювати повідомлення
 processed_messages = set()
