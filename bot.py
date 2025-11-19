@@ -13,19 +13,15 @@ from dotenv import load_dotenv
 # ----------------------------
 # Налаштування
 # ----------------------------
-load_dotenv()  # якщо хочеш локально тестувати через .env
+load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 3000))
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-CHANNEL_ID = -1002245865369  # змінити на твій канал
+CHANNEL_ID = -1002245865369  # твій канал
 
 if not TOKEN:
     raise ValueError("❌ BOT_TOKEN не задано у змінних середовища")
-if not WEBHOOK_URL:
-    raise ValueError("❌ WEBHOOK_URL не задано у змінних середовища")
-
-WEBHOOK_PATH = f"/webhook/{TOKEN}"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -113,6 +109,8 @@ async def callbacks(callback: CallbackQuery):
 # ----------------------------
 # Webhook
 # ----------------------------
+WEBHOOK_PATH = f"/webhook/{TOKEN}"
+
 async def handle_webhook(request):
     update = await request.json()
     await dp.feed_update(update)
@@ -120,8 +118,9 @@ async def handle_webhook(request):
 
 async def on_startup(app):
     scheduler.start()
-    await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
-    print(f"✅ Webhook встановлено: {WEBHOOK_URL + WEBHOOK_PATH}")
+    if WEBHOOK_URL:
+        await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
+        print(f"✅ Webhook встановлено: {WEBHOOK_URL + WEBHOOK_PATH}")
 
 async def on_cleanup(app):
     await bot.delete_webhook()
@@ -132,5 +131,13 @@ app.router.add_post(WEBHOOK_PATH, handle_webhook)
 app.on_startup.append(on_startup)
 app.on_cleanup.append(on_cleanup)
 
+# ----------------------------
+# Запуск
+# ----------------------------
 if __name__ == "__main__":
-    web.run_app(app, host="0.0.0.0", port=PORT)
+    # Якщо хочеш тестувати /start і /menu через Telegram чат:
+    if os.getenv("POLLING_TEST") == "1":
+        print("⚡ Режим тестування через polling увімкнено")
+        asyncio.run(dp.start_polling(bot))
+    else:
+        web.run_app(app, host="0.0.0.0", port=PORT)
