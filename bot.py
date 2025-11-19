@@ -13,20 +13,19 @@ from dotenv import load_dotenv
 # ----------------------------
 # Налаштування
 # ----------------------------
-load_dotenv()
+load_dotenv()  # якщо хочеш локально тестувати через .env
 
 TOKEN = os.getenv("BOT_TOKEN")
-PORT = int(os.getenv("PORT", 3000))  # локальний порт
-NGROK_URL = os.getenv("NGROK_URL")  # сюди ставимо HTTPS URL з ngrok
+PORT = int(os.getenv("PORT", 3000))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+CHANNEL_ID = -1002245865369  # змінити на твій канал
 
 if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN не задано у .env")
-if not NGROK_URL:
-    raise ValueError("❌ NGROK_URL не задано у .env. Використай ngrok для локального HTTPS.")
+    raise ValueError("❌ BOT_TOKEN не задано у змінних середовища")
+if not WEBHOOK_URL:
+    raise ValueError("❌ WEBHOOK_URL не задано у змінних середовища")
 
-CHANNEL_ID = -1002245865369
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
-WEBHOOK_URL = NGROK_URL + WEBHOOK_PATH
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -121,8 +120,8 @@ async def handle_webhook(request):
 
 async def on_startup(app):
     scheduler.start()
-    await bot.set_webhook(WEBHOOK_URL)
-    print(f"✅ Webhook встановлено: {WEBHOOK_URL}")
+    await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
+    print(f"✅ Webhook встановлено: {WEBHOOK_URL + WEBHOOK_PATH}")
 
 async def on_cleanup(app):
     await bot.delete_webhook()
