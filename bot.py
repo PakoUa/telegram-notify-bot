@@ -29,7 +29,7 @@ router = Router()
 dp.include_router(router)
 scheduler = AsyncIOScheduler()
 
-pattern = r"(\d{2}:\d{2})\s*до\s*(\d{2}:\d{2})"
+pattern = r"з(\d{2}:\d{2})\s*до\s*(\d{2}:\d{2})"
 schedule_list = []
 
 # ----------------------------
@@ -100,7 +100,7 @@ async def callbacks(callback: CallbackQuery):
     elif callback.data == "help":
         await callback.message.answer(
             "🔧 *Допомога*\n\n"
-            "Бот шукає строки типу `09:30 до 13:30`\n"
+            "Бот шукає строки типу `з09:30 до 13:30`\n"
             "і надсилає нагадування за 10 хвилин.",
             parse_mode=ParseMode.MARKDOWN
         )
