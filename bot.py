@@ -4,23 +4,24 @@ from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import BaseFilter
 
-API_TOKEN = "8208867869:AAGJl4vTXuBqtWfYQ5Pq5BKDMi4ytPpZHGA"
+API_TOKEN = "8208867869:AAHsSu-TgJsjoXMkdyRMQQON37Z3em2Dw3A"
 CHANNEL_ID = -1002245865369  # ID каналу svitlobot_kiltseva14
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-processed_messages = set()  # для унікальності повідомлен
+processed_messages = set()  # для унікальності повідомлень
 
 # -------------------------------
-# Функція для очищення webhook
+# Скидання Webhook та старих оновлень
 # -------------------------------
 async def reset_bot():
     await bot.delete_webhook(drop_pending_updates=True)
-    print("Webhook видалено, всі старі оновлення очищені")
+    print("Webhook видалено, старі оновлення очищені")
+    await bot.session.close()
 
 # -------------------------------
-# Функція для парсингу часу відключень
+# Парсинг часу відключень
 # -------------------------------
 def extract_times(text: str):
     times = re.findall(r'з (\d{1,2}:\d{2}) до (\d{1,2}:\d{2})', text)
@@ -35,7 +36,7 @@ def extract_times(text: str):
     return result
 
 # -------------------------------
-# Відправка попереджень за 10 хвилин
+# Відправка попереджень за 10 хв
 # -------------------------------
 async def schedule_alerts(times):
     for start_time in times:
@@ -49,11 +50,10 @@ async def schedule_alerts(times):
             )
 
 # -------------------------------
-# Фільтр для каналів
+# Фільтр для каналу
 # -------------------------------
 class ChannelMessageFilter(BaseFilter):
     async def __call__(self, message: types.Message) -> bool:
-        # Перевіряємо, що це повідомлення з каналу, а не приватне
         return message.chat.id == CHANNEL_ID and message.sender_chat is not None
 
 # -------------------------------
@@ -69,10 +69,11 @@ async def handle_channel_message(message: types.Message):
         asyncio.create_task(schedule_alerts(times))
 
 # -------------------------------
-# Запуск бота
+# Основний запуск бота
 # -------------------------------
 async def main():
-    await reset_bot()  # очищаємо старі webhook/чергу
+    # Скидаємо Webhook і старі оновлення перед стартом polling
+    await reset_bot()
     print("Бот запущено, слухаємо нові повідомлення...")
     await dp.start_polling(bot)
 
