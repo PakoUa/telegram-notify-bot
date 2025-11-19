@@ -9,17 +9,20 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.enums import ParseMode
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
+from aiohttp import web
 
 # ----------------------------
 # CONFIG
 # ----------------------------
-load_dotenv()  # зчитування змінних з .env
+load_dotenv()
 
-TOKEN = os.getenv("BOT_TOKEN")  # переконайся, що у .env є BOT_TOKEN=токен
+TOKEN = os.getenv("BOT_TOKEN")  # токен бота
 if not TOKEN:
-    raise ValueError("Токен не знайдено! Встановіть BOT_TOKEN у .env або в середовищі.")
+    raise ValueError("Встановіть BOT_TOKEN у .env")
 
 CHANNEL_ID = -1002245865369  # твій канал
+WEBHOOK_PATH = f"/webhook/{TOKEN}"
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://yourdomain.com + WEBHOOK_PATH
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -28,7 +31,6 @@ dp.include_router(router)
 
 scheduler = AsyncIOScheduler()
 
-# шаблон "09:30 до 13:30"
 pattern = r"(\d{2}:\d{2})\s*до\s*(\d{2}:\d{2})"
 schedule_list = []
 
@@ -64,7 +66,6 @@ def schedule_event(start_time: str):
         year=now.year, month=now.month, day=now.day
     )
 
-    # Если время прошло — на завтра
     if event_time < now:
         event_time += timedelta(days=1)
 
@@ -84,13 +85,10 @@ def schedule_event(start_time: str):
 # ----------------------------
 @router.message()
 async def parse_channel(message: Message):
-    # работаем только с каналом
     if message.chat.id != CHANNEL_ID:
         return
 
-    text = message.text
-    matches = re.findall(pattern, text)
-
+    matches = re.findall(pattern, message.text or "")
     if matches:
         schedule_list.clear()
         for start, end in matches:
@@ -107,17 +105,9 @@ async def parse_channel(message: Message):
 # ----------------------------
 @router.callback_query()
 async def callbacks(callback: CallbackQuery):
-
     if callback.data == "show_schedule":
-        if schedule_list:
-            text = "📅 Поточне розклад:\n"
-            for t in schedule_list:
-                text += f"• {t}\n"
-        else:
-            text = "⛔️ Розклад порожній."
-
+        text = "📅 Поточне розклад:\n" + "\n".join(f"• {t}" for t in schedule_list) if schedule_list else "⛔️ Розклад порожній."
         await callback.message.answer(text)
-
     elif callback.data == "help":
         await callback.message.answer(
             "🔧 *Допомога*\n\n"
@@ -125,15 +115,28 @@ async def callbacks(callback: CallbackQuery):
             "і надсилає нагадування за 10 хвилин.",
             parse_mode=ParseMode.MARKDOWN
         )
-
     await callback.answer()
 
 # ----------------------------
-# Запуск
+# Webhook
 # ----------------------------
-async def main():
+async def handle_webhook(request):
+    update = await request.json()
+    await dp.feed_update(update)
+    return web.Response(status=200)
+
+async def on_startup(app):
     scheduler.start()
-    await dp.start_polling(bot)
+    # встановлюємо webhook
+    await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
+
+async def on_cleanup(app):
+    await bot.delete_webhook()
+
+app = web.Application()
+app.router.add_post(WEBHOOK_PATH, handle_webhook)
+app.on_startup.append(on_startup)
+app.on_cleanup.append(on_cleanup)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    web.run_app(app, host="0.0.0.0", port=int(os.getenv("PORT", 3000)))
