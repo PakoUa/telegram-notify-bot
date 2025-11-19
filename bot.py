@@ -2,41 +2,36 @@ import os
 import re
 from datetime import datetime, timedelta
 import asyncio
-
 from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from dotenv import load_dotenv
 from aiohttp import web
+from dotenv import load_dotenv
 
 # ----------------------------
-# CONFIG
+# Налаштування
 # ----------------------------
-load_dotenv()  # зчитування .env
+load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-PORT = int(os.getenv("PORT", 3000))  # дефолт 3000
+PORT = int(os.getenv("PORT", 3000))  # локальний порт
+NGROK_URL = os.getenv("NGROK_URL")  # сюди ставимо HTTPS URL з ngrok
 
-# Перевірка токена і webhook URL
 if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN не знайдено у .env")
-if not WEBHOOK_URL:
-    raise ValueError("❌ WEBHOOK_URL не знайдено у .env")
+    raise ValueError("❌ BOT_TOKEN не задано у .env")
+if not NGROK_URL:
+    raise ValueError("❌ NGROK_URL не задано у .env. Використай ngrok для локального HTTPS.")
 
-CHANNEL_ID = -1002245865369  # твій канал
+CHANNEL_ID = -1002245865369
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
+WEBHOOK_URL = NGROK_URL + WEBHOOK_PATH
 
-# ----------------------------
-# Ініціалізація бота
-# ----------------------------
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 router = Router()
 dp.include_router(router)
-
 scheduler = AsyncIOScheduler()
 
 pattern = r"(\d{2}:\d{2})\s*до\s*(\d{2}:\d{2})"
@@ -57,7 +52,7 @@ async def cmd_start(message: Message):
     await message.answer("Меню бота 👇", reply_markup=main_menu())
 
 # ----------------------------
-# Уведомлення
+# Нагадування
 # ----------------------------
 async def send_notification(start_time: str):
     await bot.send_message(
@@ -126,9 +121,8 @@ async def handle_webhook(request):
 
 async def on_startup(app):
     scheduler.start()
-    print("🚀 Бот стартує...")
-    await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
-    print(f"✅ Webhook встановлено: {WEBHOOK_URL + WEBHOOK_PATH}")
+    await bot.set_webhook(WEBHOOK_URL)
+    print(f"✅ Webhook встановлено: {WEBHOOK_URL}")
 
 async def on_cleanup(app):
     await bot.delete_webhook()
