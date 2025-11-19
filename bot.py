@@ -1,173 +1,56 @@
-import os
 import re
-from datetime import datetime, timedelta
 import asyncio
-from aiogram import Bot, Dispatcher, Router
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.enums import ParseMode
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from aiohttp import web
-from dotenv import load_dotenv
+from datetime import datetime, timedelta
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import Message
 
-# ----------------------------
-# Налаштування
-# ----------------------------
-load_dotenv()
+API_TOKEN = "8208867869:AAHsSu-TgJsjoXMkdyRMQQON37Z3em2Dw3A"
+CHANNEL_ID = -1002245865369  # ID каналу svitlobot_kiltseva14
 
-TOKEN = os.getenv("BOT_TOKEN")
-PORT = int(os.getenv("PORT", 3000))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-CHANNEL_ID = -1002245865369  # твій канал
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot)
 
-if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN не задано у змінних .env")
+# Щоб не дублювати повідомлення
+processed_messages = set()
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
-router = Router()
-dp.include_router(router)
-scheduler = AsyncIOScheduler()
-
-# патерн "з09:30 до 13:30"
-pattern = r"з(\d{2}:\d{2})\s*до\s*(\d{2}:\d{2})"
-
-# тут зберігається список початкових часів
-schedule_list = []
-
-# ----------------------------
-# Меню
-# ----------------------------
-def main_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📅 Показати розклад", callback_data="show_schedule")],
-        [InlineKeyboardButton(text="🔧 Допомога", callback_data="help")],
-    ])
-
-@router.message(Command("start"))
-@router.message(Command("menu"))
-async def cmd_start(message: Message):
-    await message.answer("Меню бота 👇", reply_markup=main_menu())
-
-
-# ----------------------------
-# Нагадування
-# ----------------------------
-async def send_notification(start_time: str):
-    await bot.send_message(
-        CHANNEL_ID,
-        f"⚠️ *Нагадування!*\n"
-        f"Можливе відключення світла згідно графіка.\n"
-        f"⏰ Початок: *{start_time}*",
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-def schedule_event(start_time: str):
-    now = datetime.now()
-
-    event_time = datetime.strptime(start_time, "%H:%M").replace(
-        year=now.year, month=now.month, day=now.day
-    )
-
-    if event_time < now:
-        event_time += timedelta(days=1)
-
-    notify_time = event_time - timedelta(minutes=10)
-
-    scheduler.add_job(
-        send_notification,
-        "date",
-        run_date=notify_time,
-        args=[start_time]
-    )
-
-    schedule_list.append(start_time)
-
-
-# ----------------------------
-# Обробка повідомлень з каналу
-# ----------------------------
-@router.channel_post()
-async def parse_channel(message: Message):
-    # Лог у Railway, щоб бачити повідомлення
-    print("🔥 Отримано повідомлення з каналу:", message.chat.id, message.text)
-
-    # Перевіряємо, що повідомлення саме з нашого каналу
-    if message.chat.id != CHANNEL_ID:
-        return
-
-    # Застосовуємо регулярний вираз для пошуку розкладу
-    matches = re.findall(pattern, message.text or "")
-    if matches:
-        schedule_list.clear()
-        for start, _ in matches:
-            schedule_event(start)
-
-        # Відправляємо повідомлення у канал про обробку
-        await bot.send_message(
-            CHANNEL_ID,
-            "📥 Знайдено часові проміжки!\nБот надішле нагадування за 10 хвилин ⚡️"
+# Витягуємо часи відключення
+def extract_times(text):
+    times = re.findall(r'з (\d{1,2}:\d{2}) до (\d{1,2}:\d{2})', text)
+    result = []
+    for start, end in times:
+        start_dt = datetime.strptime(start, "%H:%M").replace(
+            year=datetime.now().year,
+            month=datetime.now().month,
+            day=datetime.now().day
         )
-# ----------------------------
-# Callback кнопки
-# ----------------------------
-@router.callback_query()
-async def callbacks(callback: CallbackQuery):
-    if callback.data == "show_schedule":
-        if schedule_list:
-            text = "📅 Поточний розклад:\n" + "\n".join(f"• {t}" for t in schedule_list)
-        else:
-            text = "⛔️ Розклад порожній."
+        result.append(start_dt)
+    return result
 
-        await callback.message.answer(text)
+# Планування повідомлення
+async def schedule_alerts(times):
+    for start_time in times:
+        alert_time = start_time - timedelta(minutes=10)
+        now = datetime.now()
+        wait_seconds = (alert_time - now).total_seconds()
+        if wait_seconds > 0:
+            await asyncio.sleep(wait_seconds)
+            await bot.send_message(CHANNEL_ID, f"⚡ Увага! Світло вимкнуть о {start_time.strftime('%H:%M')}")
 
-    elif callback.data == "help":
-        await callback.message.answer(
-            "🔧 *Допомога*\n\n"
-            "Бот шукає строки виду:\n"
-            "`з09:30 до 13:30`\n"
-            "і надсилає нагадування за 10 хвилин.",
-            parse_mode=ParseMode.MARKDOWN
-        )
+# Ловимо нові повідомлення в каналі
+@dp.channel_post_handler()
+async def handle_channel_post(message: Message):
+    if message.chat.id == CHANNEL_ID:
+        if message.message_id in processed_messages:
+            return
+        processed_messages.add(message.message_id)
+        times = extract_times(message.text)
+        if times:
+            asyncio.create_task(schedule_alerts(times))
 
-    await callback.answer()
+# Запуск бота
+async def main():
+    print("Бот запущено...")
+    await dp.start_polling(bot)
 
-
-# ----------------------------
-# Webhook
-# ----------------------------
-WEBHOOK_PATH = f"/webhook/{TOKEN}"
-
-async def handle_webhook(request):
-    update = await request.json()
-    await dp.feed_update(update)
-    return web.Response(status=200)
-
-async def on_startup(app):
-    scheduler.start()
-
-    if WEBHOOK_URL:
-        await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
-        print(f"✅ Webhook встановлено: {WEBHOOK_URL + WEBHOOK_PATH}")
-    else:
-        print("⚠️ WEBHOOK_URL не задано!")
-
-async def on_cleanup(app):
-    await bot.delete_webhook()
-    print("🛑 Webhook видалено")
-
-app = web.Application()
-app.router.add_post(WEBHOOK_PATH, handle_webhook)
-app.on_startup.append(on_startup)
-app.on_cleanup.append(on_cleanup)
-
-
-# ----------------------------
-# Запуск
-# ----------------------------
 if __name__ == "__main__":
-    if os.getenv("POLLING_TEST") == "1":
-        print("⚡ Режим тестування через polling увімкнено")
-        asyncio.run(dp.start_polling(bot))
-    else:
-        web.run_app(app, host="0.0.0.0", port=PORT)
+    asyncio.run(main())
