@@ -14,16 +14,24 @@ from aiohttp import web
 # ----------------------------
 # CONFIG
 # ----------------------------
-load_dotenv()
+load_dotenv()  # зчитування .env
 
-TOKEN = os.getenv("BOT_TOKEN")  # токен бота
+TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", 3000))  # дефолт 3000
+
+# Перевірка токена і webhook URL
 if not TOKEN:
-    raise ValueError("Встановіть BOT_TOKEN у .env")
+    raise ValueError("❌ BOT_TOKEN не знайдено у .env")
+if not WEBHOOK_URL:
+    raise ValueError("❌ WEBHOOK_URL не знайдено у .env")
 
 CHANNEL_ID = -1002245865369  # твій канал
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://yourdomain.com + WEBHOOK_PATH
 
+# ----------------------------
+# Ініціалізація бота
+# ----------------------------
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 router = Router()
@@ -49,7 +57,7 @@ async def cmd_start(message: Message):
     await message.answer("Меню бота 👇", reply_markup=main_menu())
 
 # ----------------------------
-# Уведомления
+# Уведомлення
 # ----------------------------
 async def send_notification(start_time: str):
     await bot.send_message(
@@ -65,23 +73,15 @@ def schedule_event(start_time: str):
     event_time = datetime.strptime(start_time, "%H:%M").replace(
         year=now.year, month=now.month, day=now.day
     )
-
     if event_time < now:
         event_time += timedelta(days=1)
 
     notify_time = event_time - timedelta(minutes=10)
-
-    scheduler.add_job(
-        send_notification,
-        "date",
-        run_date=notify_time,
-        args=[start_time]
-    )
-
+    scheduler.add_job(send_notification, "date", run_date=notify_time, args=[start_time])
     schedule_list.append(start_time)
 
 # ----------------------------
-# Обработка сообщений из канала
+# Обробка повідомлень з каналу
 # ----------------------------
 @router.message()
 async def parse_channel(message: Message):
@@ -91,13 +91,12 @@ async def parse_channel(message: Message):
     matches = re.findall(pattern, message.text or "")
     if matches:
         schedule_list.clear()
-        for start, end in matches:
+        for start, _ in matches:
             schedule_event(start)
 
         await bot.send_message(
             CHANNEL_ID,
-            f"📥 Знайдено часові проміжки!\n"
-            f"Бот надішле нагадування за 10 хвилин ⚡️"
+            "📥 Знайдено часові проміжки!\nБот надішле нагадування за 10 хвилин ⚡️"
         )
 
 # ----------------------------
@@ -127,11 +126,13 @@ async def handle_webhook(request):
 
 async def on_startup(app):
     scheduler.start()
-    # встановлюємо webhook
+    print("🚀 Бот стартує...")
     await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
+    print(f"✅ Webhook встановлено: {WEBHOOK_URL + WEBHOOK_PATH}")
 
 async def on_cleanup(app):
     await bot.delete_webhook()
+    print("🛑 Webhook видалено")
 
 app = web.Application()
 app.router.add_post(WEBHOOK_PATH, handle_webhook)
@@ -139,4 +140,4 @@ app.on_startup.append(on_startup)
 app.on_cleanup.append(on_cleanup)
 
 if __name__ == "__main__":
-    web.run_app(app, host="0.0.0.0", port=int(os.getenv("PORT", 3000)))
+    web.run_app(app, host="0.0.0.0", port=PORT)
