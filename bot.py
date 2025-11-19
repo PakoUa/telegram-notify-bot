@@ -10,7 +10,7 @@ CHANNEL_ID = -1002245865369  # ID каналу svitlobot_kiltseva14
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-processed_messages = set()  # для унікальності повідомлень
+processed_messages = set()  # для унікальності повідомлен
 
 # -------------------------------
 # Функція для очищення webhook
