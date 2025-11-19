@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import BaseFilter
 
-API_TOKEN = "8208867869:AAHsSu-TgJsjoXMkdyRMQQON37Z3em2Dw3A"
+API_TOKEN = "8208867869:AAGJl4vTXuBqtWfYQ5Pq5BKDMi4ytPpZHGA"
 CHANNEL_ID = -1002245865369  # ID каналу svitlobot_kiltseva14
 
 bot = Bot(token=API_TOKEN)
