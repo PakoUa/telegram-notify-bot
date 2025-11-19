@@ -89,16 +89,14 @@ def schedule_event(start_time: str):
 # ----------------------------
 @router.channel_post()
 async def parse_channel(message: Message):
-print("🔥 Отримано повідомлення з каналу:", message.chat.id, message.text)
+    print("🔥 Отримано повідомлення з каналу:", message.chat.id, message.text)
+
     if message.chat.id != CHANNEL_ID:
         return
 
-    text = message.text or ""
-    matches = re.findall(pattern, text)
-
+    matches = re.findall(pattern, message.text or "")
     if matches:
         schedule_list.clear()
-
         for start, _ in matches:
             schedule_event(start)
 
@@ -106,7 +104,6 @@ print("🔥 Отримано повідомлення з каналу:", message
             CHANNEL_ID,
             "📥 Знайдено часові проміжки!\nБот надішле нагадування за 10 хвилин ⚡️"
         )
-
 
 # ----------------------------
 # Callback кнопки
