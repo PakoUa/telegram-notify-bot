@@ -89,6 +89,7 @@ def schedule_event(start_time: str):
 # ----------------------------
 @router.channel_post()
 async def parse_channel(message: Message):
+print("🔥 Отримано повідомлення з каналу:", message.chat.id, message.text)
     if message.chat.id != CHANNEL_ID:
         return
 
