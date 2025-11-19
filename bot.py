@@ -1,21 +1,27 @@
 import os
 import re
 from datetime import datetime, timedelta
+import asyncio
 
 from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
-
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from dotenv import load_dotenv
 
 # ----------------------------
 # CONFIG
 # ----------------------------
-TOKEN = os.getenv("TOKEN")
-CHANNEL_ID = -1002245865369  # твой канал
+load_dotenv()  # зчитування змінних з .env
 
-bot = Bot(TOKEN)
+TOKEN = os.getenv("BOT_TOKEN")  # переконайся, що у .env є BOT_TOKEN=токен
+if not TOKEN:
+    raise ValueError("Токен не знайдено! Встановіть BOT_TOKEN у .env або в середовищі.")
+
+CHANNEL_ID = -1002245865369  # твій канал
+
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
 router = Router()
 dp.include_router(router)
@@ -24,9 +30,7 @@ scheduler = AsyncIOScheduler()
 
 # шаблон "09:30 до 13:30"
 pattern = r"(\d{2}:\d{2})\s*до\s*(\d{2}:\d{2})"
-
 schedule_list = []
-
 
 # ----------------------------
 # Меню
@@ -37,12 +41,10 @@ def main_menu():
         [InlineKeyboardButton(text="🔧 Помощь", callback_data="help")],
     ])
 
-
 @router.message(Command("start"))
 @router.message(Command("menu"))
 async def cmd_start(message: Message):
     await message.answer("Меню бота 👇", reply_markup=main_menu())
-
 
 # ----------------------------
 # Уведомления
@@ -56,10 +58,8 @@ async def send_notification(start_time: str):
         parse_mode=ParseMode.MARKDOWN
     )
 
-
 def schedule_event(start_time: str):
     now = datetime.now()
-
     event_time = datetime.strptime(start_time, "%H:%M").replace(
         year=now.year, month=now.month, day=now.day
     )
@@ -79,7 +79,6 @@ def schedule_event(start_time: str):
 
     schedule_list.append(start_time)
 
-
 # ----------------------------
 # Обработка сообщений из канала
 # ----------------------------
@@ -94,7 +93,6 @@ async def parse_channel(message: Message):
 
     if matches:
         schedule_list.clear()
-
         for start, end in matches:
             schedule_event(start)
 
@@ -103,7 +101,6 @@ async def parse_channel(message: Message):
             f"📥 Знайдено часові проміжки!\n"
             f"Бот надішле нагадування за 10 хвилин ⚡️"
         )
-
 
 # ----------------------------
 # Callbacks
@@ -131,7 +128,6 @@ async def callbacks(callback: CallbackQuery):
 
     await callback.answer()
 
-
 # ----------------------------
 # Запуск
 # ----------------------------
@@ -139,7 +135,5 @@ async def main():
     scheduler.start()
     await dp.start_polling(bot)
 
-
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
