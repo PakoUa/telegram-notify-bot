@@ -1,70 +1,70 @@
-import os
+   import os
 import re
 from datetime import datetime, timedelta
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
+from aiogram import Bot, Dispatcher, Router
+from aiogram.filters import Command
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.enums import ParseMode
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# =========================
+# ----------------------------
 # CONFIG
-# =========================
+# ----------------------------
 TOKEN = os.getenv("TOKEN")
-CHANNEL_ID = -1002245865369   # Твой канал
+CHANNEL_ID = -1002245865369  # твой канал
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher(bot)
+bot = Bot(TOKEN)
+dp = Dispatcher()
+router = Router()
+dp.include_router(router)
+
 scheduler = AsyncIOScheduler()
 
-
-# =========================
-# МЕНЮ
-# =========================
-def main_menu():
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton("📅 Показать расписание", callback_data="show_schedule"))
-    keyboard.add(types.InlineKeyboardButton("🔧 Помощь", callback_data="help"))
-    return keyboard
-
-@dp.message_handler(commands=["start", "menu"])
-async def start_cmd(message: types.Message):
-    await message.answer(
-        "Меню бота 👇\nВыберите действие:",
-        reply_markup=main_menu()
-    )
-
-
-# =========================
-# ПАРСИНГ РАСПИСАНИЯ
-# =========================
-
-# ищем строки вида "09:30 до 13:30"
+# шаблон "09:30 до 13:30"
 pattern = r"(\d{2}:\d{2})\s*до\s*(\d{2}:\d{2})"
 
-# Храним расписание здесь
 schedule_list = []
 
 
-# =========================
-# Запуск уведомления
-# =========================
-async def send_notification(start_time):
+# ----------------------------
+# Меню
+# ----------------------------
+def main_menu():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📅 Показать расписание", callback_data="show_schedule")],
+        [InlineKeyboardButton(text="🔧 Помощь", callback_data="help")],
+    ])
+
+
+@router.message(Command("start"))
+@router.message(Command("menu"))
+async def cmd_start(message: Message):
+    await message.answer("Меню бота 👇", reply_markup=main_menu())
+
+
+# ----------------------------
+# Уведомления
+# ----------------------------
+async def send_notification(start_time: str):
     await bot.send_message(
         CHANNEL_ID,
-        f"⚠️ *Нагадування!* ⚡️\n"
-        f"Через 10 хвилин почнеться відключення світла.\n"
+        f"⚠️ *Нагадування!*\n"
+        f"Незабаром можливо відключення світла згідно графіка.\n"
         f"⏰ Початок: *{start_time}*",
-        parse_mode="Markdown"
+        parse_mode=ParseMode.MARKDOWN
     )
 
 
-def schedule_event(start_time):
+def schedule_event(start_time: str):
     now = datetime.now()
+
     event_time = datetime.strptime(start_time, "%H:%M").replace(
         year=now.year, month=now.month, day=now.day
     )
 
-    # якщо час вже минув – на завтра
+    # Если время прошло — на завтра
     if event_time < now:
         event_time += timedelta(days=1)
 
@@ -80,18 +80,16 @@ def schedule_event(start_time):
     schedule_list.append(start_time)
 
 
-# =========================
-# ОБРАБОТКА сообщений из канала
-# =========================
-@dp.message_handler(content_types=["text"])
-async def handle_messages(message: types.Message):
-
-    # Обрабатываем только канал
+# ----------------------------
+# Обработка сообщений из канала
+# ----------------------------
+@router.message()
+async def parse_channel(message: Message):
+    # работаем только с каналом
     if message.chat.id != CHANNEL_ID:
         return
 
     text = message.text
-
     matches = re.findall(pattern, text)
 
     if matches:
@@ -103,39 +101,45 @@ async def handle_messages(message: types.Message):
         await bot.send_message(
             CHANNEL_ID,
             f"📥 Знайдено часові проміжки!\n"
-            f"Бот надішле нагадування за 10 хвилин до кожного відключення ⚡️"
+            f"Бот надішле нагадування за 10 хвилин ⚡️"
         )
 
 
-# =========================
-# МЕНЮ CALLBACK
-# =========================
-@dp.callback_query_handler(lambda c: True)
-async def callbacks(callback: types.CallbackQuery):
+# ----------------------------
+# Callbacks
+# ----------------------------
+@router.callback_query()
+async def callbacks(callback: CallbackQuery):
+
     if callback.data == "show_schedule":
         if schedule_list:
-            text = "📅 Розклад сьогодні:\n"
+            text = "📅 Поточне розклад:\n"
             for t in schedule_list:
                 text += f"• {t}\n"
         else:
-            text = "⛔️ Розклад порожній. Додайте повідомлення в канал."
+            text = "⛔️ Розклад порожній."
+
         await callback.message.answer(text)
 
     elif callback.data == "help":
         await callback.message.answer(
             "🔧 *Допомога*\n\n"
-            "Бот автоматично шукає часи у форматі:\n"
-            "`09:30 до 13:30`\n"
-            "та надсилає нагадування за 10 хвилин.",
-            parse_mode="Markdown"
+            "Бот шукає строки типу `09:30 до 13:30`\n"
+            "і надсилає нагадування за 10 хвилин.",
+            parse_mode=ParseMode.MARKDOWN
         )
 
     await callback.answer()
 
 
-# =========================
-# СТАРТ
-# =========================
-if __name__ == "__main__":
+# ----------------------------
+# Запуск
+# ----------------------------
+async def main():
     scheduler.start()
-    executor.start_polling(dp, skip_updates=True)
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
